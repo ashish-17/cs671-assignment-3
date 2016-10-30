@@ -8,7 +8,6 @@
 #SBATCH -N 2
 #SBATCH -t 00:10:00
 
-#Uncomment following lines to run on caliburn
 #cd $HOME/q2
 #module load openmpi
 #sleep 3
@@ -25,7 +24,7 @@ num_proc=1
 max=65
 while [ "$num_proc" -lt "$max" ] 
 do
-    mpirun -n $num_proc ./main 0 >> "stats_mpi_barrier.csv"
+    mpirun -n $num_proc ./main 0 1000 >> "stats_mpi_barrier.csv"
     num_proc=$(($num_proc+1))
 done
 
@@ -33,7 +32,7 @@ num_proc=1
 max=65
 while [ "$num_proc" -lt "$max" ] 
 do
-    mpirun -n $num_proc ./main 1 >> "stats_my_barrier.csv"
+    mpirun -n $num_proc ./main 1 1000 >> "stats_my_barrier.csv"
     num_proc=$(($num_proc+1))
 done
 :

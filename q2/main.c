@@ -14,6 +14,10 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         choice = atoi(argv[1]);
     }
+    int reps = 1;
+    if (argc > 2) {
+        reps = atoi(argv[2]);
+    }
 
     double startTime = 0.0; 
     double endTime = 0.0; 
@@ -38,15 +42,19 @@ int main(int argc, char** argv) {
 
     if (choice == 0) {
         startTime = MPI_Wtime();
-        MPI_Barrier(MPI_COMM_WORLD);
+        for (idx = 0; idx < reps; ++idx) {
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
         endTime = MPI_Wtime();
     } else {
         startTime = MPI_Wtime();
-        my_barrier();
+        for (idx = 0; idx < reps; ++idx) {
+            my_barrier();
+        }
         endTime = MPI_Wtime();
     }
 
-    deltaT = endTime - startTime;
+    deltaT = (endTime - startTime) / reps;
 
     if (rank == 0) {
         minT = deltaT;
