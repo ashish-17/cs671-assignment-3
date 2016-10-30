@@ -1,5 +1,5 @@
 CC = mpicc
-CFLAGS = -O3 -Wall -I.
+CFLAGS = -O3 -Wall -I. -lm
 RM = rm -f
 
 OBJ = main.o

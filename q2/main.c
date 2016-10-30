@@ -1,12 +1,19 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
+
+void my_barrier();
 
 int main(int argc, char** argv) {
     int rank = 0;
     int comm_size = 0;
     int tag = 0;
     int retVal = 0;
+    int choice = 0;
+    if (argc > 1) {
+        choice = atoi(argv[1]);
+    }
 
     double startTime = 0.0; 
     double endTime = 0.0; 
@@ -15,7 +22,7 @@ int main(int argc, char** argv) {
     double maxT = 0.0;
     double avgT = 0.0;
     double tmpT = 0;
-    
+
     MPI_Status status;
 
     int idx = 0;
@@ -29,9 +36,15 @@ int main(int argc, char** argv) {
     // Get the rank of the process
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    startTime = MPI_Wtime();
-    MPI_Barrier(MPI_COMM_WORLD);
-    endTime = MPI_Wtime();
+    if (choice == 0) {
+        startTime = MPI_Wtime();
+        MPI_Barrier(MPI_COMM_WORLD);
+        endTime = MPI_Wtime();
+    } else {
+        startTime = MPI_Wtime();
+        my_barrier();
+        endTime = MPI_Wtime();
+    }
 
     deltaT = endTime - startTime;
 
@@ -64,7 +77,7 @@ int main(int argc, char** argv) {
         avgT *= 1000000;
 
         avgT = (avgT / comm_size);
-        printf("\n%8.8f,%8.8f,%8.8f", minT, maxT, avgT);
+        printf("\n%d,%8.8f,%8.8f,%8.8f",comm_size, minT, maxT, avgT);
     } else {
         retVal = MPI_Send(&deltaT, 1, MPI_DOUBLE, 0, tag, MPI_COMM_WORLD);
     }
@@ -75,3 +88,32 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+void my_barrier() {
+    int comm_size = 0;
+    int rank = 0;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    int k = floor(log2(comm_size));
+    int nxt = 0;
+    int i = 0;
+
+    char sendMsg, recvMsg;
+    int dest = 0, tag = 0, retVal = 0;
+    MPI_Status status;
+    for (i = 0; i < k; ++i) {
+        nxt = (rank / (1<<(i+1))) * (1<<(i+1));
+
+        dest = ((rank+(1<<i)) % (1<<(i+1))) + nxt;
+        if (dest < comm_size) {
+            retVal = MPI_Sendrecv(&sendMsg, 1, MPI_BYTE, dest, tag, &recvMsg, 1, MPI_BYTE, dest, tag, MPI_COMM_WORLD, &status);
+            if (retVal != MPI_SUCCESS) {
+                printf("\nBarrier send/recv error");
+                MPI_Abort(MPI_COMM_WORLD, retVal);
+                exit(1);
+            }
+        }
+    }
+}
