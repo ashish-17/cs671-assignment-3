@@ -7,26 +7,26 @@
 #define TIME_TAG 4
 
 extern void mandelbrotSerial(
-    float x0, float y0, float x1, float y1,
-    int width, int height,
-    int startRow, int numRows,
-    int startCol, int totalColumns,
-    int maxIterations,
-    int output[]);
+        float x0, float y0, float x1, float y1,
+        int width, int height,
+        int startRow, int numRows,
+        int startCol, int totalColumns,
+        int maxIterations,
+        int output[]);
 
-extern void workerStatic(int rank, float x0, float y0, float x1, float y1, int width, int height, int maxIterations, int startRow, int nRows);
+extern void workerStatic(int rank, int nWorkers, float x0, float y0, float x1, float y1, int width, int height, int maxIterations, int chunk);
 
-extern void masterStatic(float x0, float y0, float x1, float y1, int width, int height, int maxIterations, int output[]);
+extern void masterStatic(float x0, float y0, float x1, float y1, int width, int height, int maxIterations, int chunk, int output[]);
 
 extern void writePPMImage(
-    int* data,
-    int width, int height,
-    const char *filename,
-    int maxIterations);
+        int* data,
+        int width, int height,
+        const char *filename,
+        int maxIterations);
 
 void scaleAndShift(float* x0, float* x1, float* y0, float* y1,
-              float scale,
-              float shiftX, float shiftY)
+        float scale,
+        float shiftX, float shiftY)
 {
 
     *x0 *= scale;
@@ -54,7 +54,7 @@ int verifyResult (int *gold, int *result, int width, int height) {
         for (j = 0; j < width; j++) {
             if (gold[i * width + j] != result[i * width + j]) {
                 printf ("Mismatch : [%d][%d], Expected : %d, Actual : %d\n",
-                            i, j, gold[i * width + j], result[i * width + j]);
+                        i, j, gold[i * width + j], result[i * width + j]);
                 return 0;
             }
         }
@@ -89,28 +89,34 @@ int main(int argc, char** argv) {
     float shiftX = -.986f;
     float shiftY = .30f;
 
+    int chunk_size = 5;
+
     while ((opt = getopt_long(argc, argv, "t:v:?", long_options, NULL)) != EOF) {
 
         switch (opt) {
-        case 'v':
-        {
-            viewIndex = atoi(optarg);
-            // change view settings
-            if (viewIndex == 2) {
-                scaleValue = .015f;
-                shiftX = -.986f;
-                shiftY = .30f;
-                scaleAndShift(&x0, &x1, &y0, &y1, scaleValue, shiftX, shiftY);
-            } else if (viewIndex > 1) {
-                fprintf(stderr, "Invalid view index\n");
-                return 1;
-            }
-            break;
-        }
-        case '?':
-        default:
-            usage(argv[0]);
-            return 1;
+            case 't': {
+                          chunk_size = atoi(optarg);
+                          break;
+                      }
+            case 'v':
+                      {
+                          viewIndex = atoi(optarg);
+                          // change view settings
+                          if (viewIndex == 2) {
+                              scaleValue = .015f;
+                              shiftX = -.986f;
+                              shiftY = .30f;
+                              scaleAndShift(&x0, &x1, &y0, &y1, scaleValue, shiftX, shiftY);
+                          } else if (viewIndex > 1) {
+                              fprintf(stderr, "Invalid view index\n");
+                              return 1;
+                          }
+                          break;
+                      }
+            case '?':
+            default:
+                      usage(argv[0]);
+                      return 1;
         }
     }
     // end parsing of commandline options
@@ -123,7 +129,7 @@ int main(int argc, char** argv) {
     double minSerial = 1e30;
     double minThread = 1e30;
     MPI_Status status;
-    
+
     int* output_serial = NULL;
     int* output_thread = NULL;
 
@@ -132,10 +138,10 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    
+
     if (rank == 0) {
         output_serial = (int*)malloc(sizeof(int)*width*height);
-        
+
         //
         // Run the serial implementation.  Run the code three times and
         // take the minimum to get a good estimate.
@@ -160,27 +166,18 @@ int main(int argc, char** argv) {
         output_thread = (int*)malloc(sizeof(int)*width*height);
         memset(output_thread, 0, width * height * sizeof(int));
     }
-    
-    int num_workers = comm_size - 1;
-    int nRows = height / num_workers;
-    if (nRows * num_workers < height) {
-        nRows++;
-    }
 
-    int nLastRows = nRows;
-    if (rank == (comm_size-1)) {
-        nLastRows = height - (nRows*(num_workers-1));
-    }
-    
+    int num_workers = comm_size - 1;
+
     MPI_Barrier(MPI_COMM_WORLD);
-    
-    for (i = 0; i < 2; ++i) {     
+
+    for (i = 0; i < 3; ++i) {     
         startTime = MPI_Wtime();
 
         if (rank == 0) {
-            masterStatic(x0, y0, x1, y1, width, height, maxIterations, output_thread);
+            masterStatic(x0, y0, x1, y1, width, height, maxIterations, chunk_size, output_thread);
         } else {
-            workerStatic(rank, x0, y0, x1, y1, width, height, maxIterations, (rank-1)*nRows, (rank == (comm_size-1) ? nLastRows : nRows));
+            workerStatic(rank, num_workers, x0, y0, x1, y1, width, height, maxIterations, chunk_size);
         }
 
         endTime = MPI_Wtime();
@@ -211,7 +208,7 @@ int main(int argc, char** argv) {
         printf("%d,%d,%.2f\n", comm_size, width*height, minSerial/minThread);
         //printf("[mandelbrot thread]:\t\t[%.3f] ms\n", minThread * 1000);
         //writePPMImage(output_thread, width, height, "mandelbrot-thread.ppm", maxIterations);
-        
+
         if (! verifyResult (output_serial, output_thread, width, height)) {
             printf ("Error : Output from threads does not match serial output\n");
         }
@@ -223,7 +220,7 @@ int main(int argc, char** argv) {
     if (output_thread != NULL) {
         free(output_thread);
     }
-   
+
     MPI_Finalize();
 
 

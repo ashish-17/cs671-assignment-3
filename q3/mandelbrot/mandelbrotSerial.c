@@ -97,19 +97,27 @@ void mandelbrotSerial(
 
 void mandelbrotProcessRowHelper(
         float x0, float y0, float x1, float y1,
-        int width, int height, int row,
+        int width, int height,
+        int startRow, int totalRows,
+        int startCol, int totalColumns,
         int maxIterations,
         int output[])
 {
     float dx = (x1 - x0) / width;
     float dy = (y1 - y0) / height;
 
-    int i = 0;
+    int endRow = startRow + totalRows;
+    int endCol = startCol + totalColumns;
+    int i = 0, j = 0;
     float x,y;
-    for (i = 0; i < width; i++) {
-        x = x0 + i * dx;
-        y = y0 + row * dy;
+    int index = 0;
+    for (j = startRow; j < endRow; j++) {
+        for (i = startCol; i < endCol; ++i) {
+            x = x0 + i * dx;
+            y = y0 + j * dy;
 
-        output[i] = mandel(x, y, maxIterations);
+            output[index] = mandel(x, y, maxIterations);
+            index++;
+        }
     }
 }
