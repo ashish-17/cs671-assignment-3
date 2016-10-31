@@ -8,6 +8,7 @@
 #SBATCH -N 2
 #SBATCH -t 00:10:00
 
+#Uncomment following lines before running on caliburn
 #cd $HOME/q2
 #module load openmpi
 #sleep 3
