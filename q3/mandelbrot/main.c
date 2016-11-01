@@ -251,7 +251,7 @@ int main(int argc, char** argv) {
 
     if (rank == 0) {
         // compute speedup
-        printf("%d,%d,%.2f\n", comm_size, width*height, minSerial/minThread);
+        printf("%d,%d,%d,%.2f\n", comm_size, width*height,chunk_size, minSerial/minThread);
         //printf("[mandelbrot thread]:\t\t[%.3f] ms\n", minThread * 1000);
         //writePPMImage(output_thread, width, height, "mandelbrot-thread.ppm", maxIterations);
 
