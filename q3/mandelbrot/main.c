@@ -18,6 +18,10 @@ extern void workerStatic(int rank, int nWorkers, float x0, float y0, float x1, f
 
 extern void masterStatic(float x0, float y0, float x1, float y1, int width, int height, int maxIterations, int chunk, int output[]);
 
+extern void workerDynamic(int rank, float x0, float y0, float x1, float y1, int width, int height, int maxIterations);
+
+extern void masterDynamic(int numWorkers, float x0, float y0, float x1, float y1, int width, int height, int maxIterations, int output[]);
+
 extern void writePPMImage(
         int* data,
         int width, int height,
@@ -63,6 +67,9 @@ int verifyResult (int *gold, int *result, int width, int height) {
     return 1;
 }
 
+#define MODE_STATIC 0
+#define MODE_DYNAMIC 1
+
 int main(int argc, char** argv) {
 
     const unsigned int width = 1200;
@@ -90,10 +97,15 @@ int main(int argc, char** argv) {
     float shiftY = .30f;
 
     int chunk_size = 5;
+    int mode = MODE_STATIC; // 
 
-    while ((opt = getopt_long(argc, argv, "t:v:?", long_options, NULL)) != EOF) {
+    while ((opt = getopt_long(argc, argv, "m:t:v:?", long_options, NULL)) != EOF) {
 
         switch (opt) {
+            case 'm' : {
+                           mode = atoi(optarg);
+                           break;
+                       }
             case 't': {
                           chunk_size = atoi(optarg);
                           break;
@@ -171,36 +183,70 @@ int main(int argc, char** argv) {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    for (i = 0; i < 3; ++i) {     
-        startTime = MPI_Wtime();
+    if (mode == MODE_STATIC) {
+        for (i = 0; i < 3; ++i) {     
+            startTime = MPI_Wtime();
 
-        if (rank == 0) {
-            masterStatic(x0, y0, x1, y1, width, height, maxIterations, chunk_size, output_thread);
-        } else {
-            workerStatic(rank, num_workers, x0, y0, x1, y1, width, height, maxIterations, chunk_size);
-        }
-
-        endTime = MPI_Wtime();
-        deltaT = endTime - startTime;
-
-        if (rank != 0) {
-            MPI_Send(&startTime, 1, MPI_DOUBLE, 0, TIME_TAG, MPI_COMM_WORLD);
-        } else {
-            for (j = 1; j < comm_size; ++j) {
-                MPI_Recv(&tmpT, 1, MPI_DOUBLE, j, TIME_TAG, MPI_COMM_WORLD, &status);
-                if (startTime > tmpT) {
-                    startTime = tmpT;
-                }
+            if (rank == 0) {
+                masterStatic(x0, y0, x1, y1, width, height, maxIterations, chunk_size, output_thread);
+            } else {
+                workerStatic(rank, num_workers, x0, y0, x1, y1, width, height, maxIterations, chunk_size);
             }
 
+            endTime = MPI_Wtime();
             deltaT = endTime - startTime;
-        }
 
-        if (deltaT < minThread) {
-            minThread = deltaT;
-        }
+            if (rank != 0) {
+                MPI_Send(&startTime, 1, MPI_DOUBLE, 0, TIME_TAG, MPI_COMM_WORLD);
+            } else {
+                for (j = 1; j < comm_size; ++j) {
+                    MPI_Recv(&tmpT, 1, MPI_DOUBLE, j, TIME_TAG, MPI_COMM_WORLD, &status);
+                    if (startTime > tmpT) {
+                        startTime = tmpT;
+                    }
+                }
 
-        MPI_Barrier(MPI_COMM_WORLD);
+                deltaT = endTime - startTime;
+            }
+
+            if (deltaT < minThread) {
+                minThread = deltaT;
+            }
+
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+    } else {
+        for (i = 0; i < 3; ++i) {     
+            startTime = MPI_Wtime();
+
+            if (rank == 0) {
+                masterDynamic(num_workers, x0, y0, x1, y1, width, height, maxIterations, output_thread);
+            } else {
+                workerDynamic(rank, x0, y0, x1, y1, width, height, maxIterations);
+            }
+
+            endTime = MPI_Wtime();
+            deltaT = endTime - startTime;
+
+            if (rank != 0) {
+                MPI_Send(&startTime, 1, MPI_DOUBLE, 0, TIME_TAG, MPI_COMM_WORLD);
+            } else {
+                for (j = 1; j < comm_size; ++j) {
+                    MPI_Recv(&tmpT, 1, MPI_DOUBLE, j, TIME_TAG, MPI_COMM_WORLD, &status);
+                    if (startTime > tmpT) {
+                        startTime = tmpT;
+                    }
+                }
+
+                deltaT = endTime - startTime;
+            }
+
+            if (deltaT < minThread) {
+                minThread = deltaT;
+            }
+
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
     }
 
     if (rank == 0) {

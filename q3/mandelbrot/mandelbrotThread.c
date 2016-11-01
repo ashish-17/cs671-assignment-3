@@ -5,7 +5,7 @@
 #include <mpi.h>
 
 #define RESULT_TAG 0
-#define WORK_TAG 1
+#define INPUT_TAG 1
 #define STOP_TAG 2
 
 extern void mandelbrotProcessRowHelper(
@@ -15,6 +15,7 @@ extern void mandelbrotProcessRowHelper(
         int startCol, int totalColumns,
         int maxIterations,
         int output[]);
+
 //
 // workerStatic --
 //
@@ -79,5 +80,69 @@ void masterStatic(float x0, float y0, float x1, float y1, int width, int height,
         elementCount += nRows*nCols;
     }
     
+    free(tmp);
+}
+
+//
+// workerDynamic --
+//
+// Thread entrypoint.
+void workerDynamic(int rank, float x0, float y0, float x1, float y1, int width, int height, int maxIterations) {
+    int row = 0;
+    MPI_Status status;
+    int size = width + 1;
+    int *output = (int*)malloc(sizeof(int) * size);
+    while ((MPI_Recv(&row, 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status) == MPI_SUCCESS) && 
+            (status.MPI_TAG == INPUT_TAG)) {
+        
+        output[0] = row;
+        mandelbrotProcessRowHelper(x0, y0, x1, y1, width, height, row, 1, 0, width, maxIterations, output+1);
+
+        MPI_Send(output, size, MPI_INT, 0, RESULT_TAG, MPI_COMM_WORLD);
+    }
+
+    free(output);
+}
+
+//
+// masterDynamic --
+//
+// Thread entrypoint.
+void masterDynamic(int numWorkers, float x0, float y0, float x1, float y1, int width, int height, int maxIterations, int output[]) {
+    int size = width + 1;
+    int* tmp = (int*)malloc(sizeof(int)*size);
+    memset(tmp, 0 , sizeof(int)*size);
+    MPI_Status status;
+
+    int row = 0;
+    int src = 0;
+    int todo = 0;
+    int next = 0;
+    int i = 0;
+
+    for (i = 0; i < numWorkers; ++i) {
+        MPI_Send(&next, 1, MPI_INT, i+1, INPUT_TAG, MPI_COMM_WORLD);
+        next++;
+        todo++;
+    }
+
+    while (todo > 0) {
+        MPI_Recv(tmp, size, MPI_INT, MPI_ANY_SOURCE, RESULT_TAG, MPI_COMM_WORLD, &status);
+        src = status.MPI_SOURCE;
+
+        row = tmp[0];
+        --todo;
+
+        if (next < height) {
+            MPI_Send(&next, 1, MPI_INT, src, INPUT_TAG, MPI_COMM_WORLD);
+            ++next;
+            ++todo;
+        } else {
+            MPI_Send(&next, 0, MPI_INT, src, STOP_TAG, MPI_COMM_WORLD);
+        }
+
+        memcpy((void*)(output + row*width), tmp + 1, sizeof(int)*width);
+    }
+
     free(tmp);
 }
