@@ -9,7 +9,7 @@
 #SBATCH -t 00:10:00
 
 #Uncomment following lines before running on caliburn
-#cd $HOME/q2
+#cd $HOME/q3/mandelbrot
 #module load openmpi
 #sleep 3
 
@@ -22,10 +22,10 @@ find . -type f -name '*.csv' -delete
 make
 
 max=65
-num_proc=101
+num_proc=2
 
 chunk=2
-max_chunk=10
+max_chunk=101
 while [ "$chunk" -lt "$max_chunk" ] 
 do
     mpirun -n 4 ./mandelbrot -t $chunk -m 0 >> "stats_mpi_mandelbrot_static_chunk_4_.csv"
